@@ -1,0 +1,4 @@
+project_id = "fbgahczvlzfewujdijcw"
+
+[functions.analyze-frame]
+verify_jwt = false
