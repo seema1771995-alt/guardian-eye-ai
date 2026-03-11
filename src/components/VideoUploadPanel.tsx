@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import { useVideoProcessor, FrameAnalysis } from "@/hooks/useVideoProcessor";
 import { CameraEvent } from "@/lib/eventData";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoUploadPanelProps {
   onAlertGenerated: (event: CameraEvent) => void;
   onEventGenerated: (event: CameraEvent) => void;
+  onAnalysisComplete?: () => void;
 }
 
 let uploadEventCounter = 500;
 
-const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPanelProps) => {
+const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComplete }: VideoUploadPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     status,
@@ -23,6 +25,44 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
     reset,
   } = useVideoProcessor();
   const [selectedFrame, setSelectedFrame] = useState<FrameAnalysis | null>(null);
+  const [currentFilename, setCurrentFilename] = useState<string>("");
+
+  const persistIncident = async (event: CameraEvent, filename: string, frameIndex: number) => {
+    try {
+      await supabase.from("incidents").insert({
+        alert_id: event.id,
+        camera_id: event.cameraId,
+        camera_name: event.cameraName,
+        location: event.location,
+        status: event.status,
+        description: event.description,
+        risk_level: event.riskLevel || null,
+        persons_detected: event.personsDetected || 0,
+        alert_type: event.alertType || null,
+        video_filename: filename,
+        frame_index: frameIndex,
+      });
+    } catch (err) {
+      console.error("Failed to persist incident:", err);
+    }
+  };
+
+  const persistFrameAnalysis = async (result: FrameAnalysis, filename: string) => {
+    try {
+      await supabase.from("frame_analyses").insert({
+        video_filename: filename,
+        frame_index: result.frameIndex,
+        persons_detected: result.analysis.personsDetected,
+        behaviors: result.analysis.behaviors as any,
+        overall_status: result.analysis.overallStatus,
+        risk_level: result.analysis.riskLevel,
+        alert_type: result.analysis.alertType || null,
+        summary: result.analysis.summary,
+      });
+    } catch (err) {
+      console.error("Failed to persist frame analysis:", err);
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,9 +73,10 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
       return;
     }
 
+    setCurrentFilename(file.name);
     const analysisResults = await processVideo(file);
 
-    // Generate dashboard events from results
+    // Generate dashboard events and persist
     if (analysisResults) {
       for (const result of analysisResults) {
         uploadEventCounter++;
@@ -57,7 +98,13 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
         } else {
           onEventGenerated(event);
         }
+
+        // Persist to database
+        await persistIncident(event, file.name, result.frameIndex);
+        await persistFrameAnalysis(result, file.name);
       }
+
+      onAnalysisComplete?.();
     }
   };
 
@@ -71,6 +118,9 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
         <h2 className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">
           Video Analysis
         </h2>
+        {currentFilename && status !== "idle" && (
+          <p className="font-mono text-[10px] text-text-dim mt-0.5 truncate">📎 {currentFilename}</p>
+        )}
       </div>
 
       {/* Upload area */}
@@ -90,7 +140,6 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
           </button>
         ) : (
           <div className="space-y-2">
-            {/* Progress */}
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-text-secondary">
                 {status === "extracting"
@@ -106,7 +155,6 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
               )}
             </div>
 
-            {/* Progress bar */}
             <div className="h-1 bg-secondary rounded-sm overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
@@ -116,12 +164,10 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
               />
             </div>
 
-            {/* Error message */}
             {status === "error" && errorMessage && (
               <p className="font-mono text-xs text-alert">{errorMessage}</p>
             )}
 
-            {/* Summary */}
             {status === "complete" && (
               <div className="flex items-center gap-3 pt-1">
                 <span className="font-mono text-xs text-text-dim">
@@ -137,15 +183,18 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated }: VideoUploadPan
                     {suspiciousCount} suspicious
                   </span>
                 )}
+                <span className="font-mono text-[10px] text-text-dim ml-auto">
+                  ✓ SAVED
+                </span>
               </div>
             )}
 
-            {/* Reset button */}
             {(status === "complete" || status === "error") && (
               <button
                 onClick={() => {
                   reset();
                   setSelectedFrame(null);
+                  setCurrentFilename("");
                 }}
                 className="font-mono text-xs text-text-dim hover:text-text-secondary transition-colors"
               >
