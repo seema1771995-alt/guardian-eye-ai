@@ -13,20 +13,28 @@ const Dashboard = () => {
   const [selectedEvent, setSelectedEvent] = useState<CameraEvent | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel>("video");
+  const [cameraCounter, setCameraCounter] = useState(0);
+
+  const getNextCameraId = useCallback(() => {
+    setCameraCounter((prev) => prev + 1);
+    const num = cameraCounter + 1;
+    return {
+      id: `CAM-${String(num).padStart(2, "0")}`,
+      name: `Camera ${num}`,
+    };
+  }, [cameraCounter]);
 
   const triggerAlert = useCallback((alertEvent: CameraEvent) => {
     setIsFlashing(true);
     setTimeout(() => setIsFlashing(false), 200);
     setSelectedEvent(alertEvent);
 
-    // Notification toast
     toast.error(`⚠ ALERT: ${alertEvent.alertType}`, {
       description: `${alertEvent.cameraId} — ${alertEvent.location}\n${alertEvent.description}`,
       duration: 8000,
     });
 
-    // Browser notification
-    if (Notification.permission === "granted") {
+    if ("Notification" in window && Notification.permission === "granted") {
       new Notification("⚠ HARASSMENT ALERT", {
         body: `${alertEvent.alertType} detected at ${alertEvent.location}`,
         icon: "/favicon.ico",
@@ -49,10 +57,6 @@ const Dashboard = () => {
   const handleVideoAlert = (event: CameraEvent) => {
     addEvent(event);
     triggerAlert(event);
-    // Auto-switch to event log when alerts come in
-    if (rightPanel === "video") {
-      // Stay on video panel
-    }
   };
 
   const handleVideoEvent = (event: CameraEvent) => {
@@ -60,7 +64,6 @@ const Dashboard = () => {
   };
 
   const handleAnalysisComplete = () => {
-    // Switch to log view after analysis completes if there are events
     if (events.length > 0) {
       setRightPanel("log");
     }
@@ -77,7 +80,7 @@ const Dashboard = () => {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
-      {/* Top bar with panel toggle */}
+      {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-text-dim" />
@@ -131,18 +134,16 @@ const Dashboard = () => {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Focus Pane - 70% */}
         <div className="flex-[7] min-w-0">
           <FocusPane event={selectedEvent} isFlashing={isFlashing} />
         </div>
-
-        {/* Right Panel - 30% */}
         <div className="flex-[3] min-w-0">
           {rightPanel === "video" ? (
             <VideoUploadPanel
               onAlertGenerated={handleVideoAlert}
               onEventGenerated={handleVideoEvent}
               onAnalysisComplete={handleAnalysisComplete}
+              getNextCameraId={getNextCameraId}
             />
           ) : rightPanel === "log" ? (
             <EventLog
