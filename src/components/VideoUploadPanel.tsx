@@ -7,11 +7,12 @@ interface VideoUploadPanelProps {
   onAlertGenerated: (event: CameraEvent) => void;
   onEventGenerated: (event: CameraEvent) => void;
   onAnalysisComplete?: () => void;
+  getNextCameraId: () => { id: string; name: string };
 }
 
 let uploadEventCounter = 500;
 
-const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComplete }: VideoUploadPanelProps) => {
+const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComplete, getNextCameraId }: VideoUploadPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     status,
@@ -20,12 +21,12 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
     currentFrame,
     results,
     errorMessage,
-    videoUrl,
     processVideo,
     reset,
   } = useVideoProcessor();
   const [selectedFrame, setSelectedFrame] = useState<FrameAnalysis | null>(null);
   const [currentFilename, setCurrentFilename] = useState<string>("");
+  const [currentCameraId, setCurrentCameraId] = useState<string>("");
 
   const persistIncident = async (event: CameraEvent, filename: string, frameIndex: number) => {
     try {
@@ -73,17 +74,20 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
       return;
     }
 
+    // Assign camera ID for this video
+    const camera = getNextCameraId();
+    setCurrentCameraId(camera.id);
     setCurrentFilename(file.name);
+
     const analysisResults = await processVideo(file);
 
-    // Generate dashboard events and persist
     if (analysisResults) {
       for (const result of analysisResults) {
         uploadEventCounter++;
         const event: CameraEvent = {
-          id: `VID-${uploadEventCounter}`,
-          cameraId: "UPLOAD",
-          cameraName: "Video Upload",
+          id: `${camera.id}-F${result.frameIndex + 1}`,
+          cameraId: camera.id,
+          cameraName: `${camera.name} — ${file.name}`,
           location: `Frame ${result.frameIndex + 1}`,
           timestamp: new Date(),
           status: result.analysis.overallStatus === "alert" ? "alert" : "safe",
@@ -91,6 +95,7 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
           riskLevel: result.analysis.overallStatus === "alert" ? result.analysis.riskLevel : undefined,
           personsDetected: result.analysis.personsDetected,
           alertType: result.analysis.alertType,
+          frameImageUrl: result.frameDataUrl,
         };
 
         if (event.status === "alert") {
@@ -99,7 +104,6 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
           onEventGenerated(event);
         }
 
-        // Persist to database
         await persistIncident(event, file.name, result.frameIndex);
         await persistFrameAnalysis(result, file.name);
       }
@@ -119,7 +123,10 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
           Video Analysis
         </h2>
         {currentFilename && status !== "idle" && (
-          <p className="font-mono text-[10px] text-text-dim mt-0.5 truncate">📎 {currentFilename}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="font-mono text-[10px] text-text-primary font-semibold">{currentCameraId}</span>
+            <span className="font-mono text-[10px] text-text-dim truncate">📎 {currentFilename}</span>
+          </div>
         )}
       </div>
 
@@ -183,9 +190,7 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
                     {suspiciousCount} suspicious
                   </span>
                 )}
-                <span className="font-mono text-[10px] text-text-dim ml-auto">
-                  ✓ SAVED
-                </span>
+                <span className="font-mono text-[10px] text-text-dim ml-auto">✓ SAVED</span>
               </div>
             )}
 
@@ -195,6 +200,7 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
                   reset();
                   setSelectedFrame(null);
                   setCurrentFilename("");
+                  setCurrentCameraId("");
                 }}
                 className="font-mono text-xs text-text-dim hover:text-text-secondary transition-colors"
               >
@@ -296,14 +302,8 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
               <div className="pt-1 space-y-0.5">
                 {selectedFrame.analysis.behaviors.map((b, i) => (
                   <div key={i} className="flex items-center gap-1.5">
-                    <span
-                      className={`w-1 h-1 rounded-full ${
-                        b.isSuspicious ? "bg-alert" : "bg-text-dim"
-                      }`}
-                    />
-                    <span className="font-body text-[10px] text-text-dim">
-                      {b.description}
-                    </span>
+                    <span className={`w-1 h-1 rounded-full ${b.isSuspicious ? "bg-alert" : "bg-text-dim"}`} />
+                    <span className="font-body text-[10px] text-text-dim">{b.description}</span>
                   </div>
                 ))}
               </div>
