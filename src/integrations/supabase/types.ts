@@ -14,7 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      frame_analyses: {
+        Row: {
+          alert_type: string | null
+          behaviors: Json | null
+          created_at: string
+          frame_image_url: string | null
+          frame_index: number
+          id: string
+          incident_id: string | null
+          overall_status: string
+          persons_detected: number | null
+          risk_level: string
+          summary: string
+          video_filename: string
+        }
+        Insert: {
+          alert_type?: string | null
+          behaviors?: Json | null
+          created_at?: string
+          frame_image_url?: string | null
+          frame_index: number
+          id?: string
+          incident_id?: string | null
+          overall_status?: string
+          persons_detected?: number | null
+          risk_level?: string
+          summary: string
+          video_filename: string
+        }
+        Update: {
+          alert_type?: string | null
+          behaviors?: Json | null
+          created_at?: string
+          frame_image_url?: string | null
+          frame_index?: number
+          id?: string
+          incident_id?: string | null
+          overall_status?: string
+          persons_detected?: number | null
+          risk_level?: string
+          summary?: string
+          video_filename?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "frame_analyses_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incidents: {
+        Row: {
+          alert_id: string
+          alert_type: string | null
+          camera_id: string
+          camera_name: string
+          created_at: string
+          description: string
+          frame_image_url: string | null
+          frame_index: number | null
+          id: string
+          location: string
+          persons_detected: number | null
+          risk_level: string | null
+          status: string
+          video_filename: string | null
+        }
+        Insert: {
+          alert_id: string
+          alert_type?: string | null
+          camera_id: string
+          camera_name: string
+          created_at?: string
+          description: string
+          frame_image_url?: string | null
+          frame_index?: number | null
+          id?: string
+          location: string
+          persons_detected?: number | null
+          risk_level?: string | null
+          status?: string
+          video_filename?: string | null
+        }
+        Update: {
+          alert_id?: string
+          alert_type?: string | null
+          camera_id?: string
+          camera_name?: string
+          created_at?: string
+          description?: string
+          frame_image_url?: string | null
+          frame_index?: number | null
+          id?: string
+          location?: string
+          persons_detected?: number | null
+          risk_level?: string | null
+          status?: string
+          video_filename?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
