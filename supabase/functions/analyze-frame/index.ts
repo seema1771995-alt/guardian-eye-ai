@@ -32,11 +32,36 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are a surveillance AI system analyzing video frames for harassment and suspicious behavior. 
-Analyze the provided image frame and detect:
-1. Number of people visible
-2. Their body positions and interactions
-3. Any signs of: physical harassment, aggressive behavior, stalking, fighting, unusual close contact, pushing, grabbing
+              content: `You are an advanced multi-stage surveillance AI system. You MUST follow this exact 4-stage pipeline before making any classification. Do NOT skip stages.
+
+STAGE 1 — PERSON DETECTION:
+Count every person visible. Note their positions (foreground, background, partially visible).
+
+STAGE 2 — POSE & BODY LANGUAGE ANALYSIS:
+For each person, describe their body pose: standing, sitting, walking, running, arms raised, crouching, leaning, etc. Note facial expressions if visible.
+
+STAGE 3 — INTERACTION CONTEXT ANALYSIS:
+Analyze relationships between people. Look for critical context clues:
+- Are people SMILING or laughing? → Likely friendly
+- Is body language RELAXED or TENSE?
+- Are movements MUTUAL (both participating) or ONE-SIDED (aggressor vs victim)?
+- Is there a CROWD watching in distress, or people casually nearby?
+- Are people in a social setting (bar, park, party) where physical contact is normal?
+- Hugging, playful pushing, helping someone up, dancing = FRIENDLY, NOT violent
+- Only flag if: one person is clearly unwilling, trapped, in pain, or trying to flee
+
+STAGE 4 — FINAL CLASSIFICATION:
+Based on ALL above stages, assign a confidence percentage (0-100).
+- confidence < 40 → overallStatus: "safe", riskLevel: "LOW"
+- confidence 40-70 → overallStatus: "suspicious", riskLevel: "MEDIUM"  
+- confidence > 70 → overallStatus: "alert", riskLevel: "HIGH"
+
+CRITICAL RULES TO REDUCE FALSE POSITIVES:
+- Friends hugging, playing, or helping each other = SAFE (confidence < 20)
+- Bar/party scenes with casual physical contact = SAFE unless clearly violent
+- Sports or roughhousing with mutual participation = SAFE
+- Only classify as "alert" when there is CLEAR evidence of unwilling victim, fear, pain, or aggression
+- When uncertain, ALWAYS err on the side of "safe" or "suspicious", NEVER "alert"
 
 You MUST respond using the provided tool function.`,
             },
@@ -45,7 +70,7 @@ You MUST respond using the provided tool function.`,
               content: [
                 {
                   type: "text",
-                  text: `Analyze frame ${frameIndex + 1} of ${totalFrames} from surveillance footage. Detect people and assess any harassment or suspicious behavior.`,
+                  text: `Analyze frame ${frameIndex + 1} of ${totalFrames} from surveillance footage. Follow all 4 stages of the detection pipeline carefully. Pay close attention to context — distinguish friendly interactions from actual threats.`,
                 },
                 {
                   type: "image_url",
@@ -62,13 +87,25 @@ You MUST respond using the provided tool function.`,
               function: {
                 name: "report_analysis",
                 description:
-                  "Report the analysis results for a surveillance frame",
+                  "Report the multi-stage analysis results for a surveillance frame",
                 parameters: {
                   type: "object",
                   properties: {
                     personsDetected: {
                       type: "number",
-                      description: "Number of people detected in frame",
+                      description: "Number of people detected in frame (Stage 1)",
+                    },
+                    poseAnalysis: {
+                      type: "string",
+                      description: "Brief description of body poses observed (Stage 2)",
+                    },
+                    interactionContext: {
+                      type: "string",
+                      description: "Analysis of whether interactions appear friendly, neutral, or hostile, with reasoning (Stage 3)",
+                    },
+                    confidence: {
+                      type: "number",
+                      description: "Confidence percentage (0-100) that the scene contains actual harassment or violence. Below 40 = safe, 40-70 = suspicious, above 70 = alert (Stage 4)",
                     },
                     behaviors: {
                       type: "array",
@@ -82,6 +119,9 @@ You MUST respond using the provided tool function.`,
                               "standing",
                               "talking",
                               "running",
+                              "hugging",
+                              "playing",
+                              "helping",
                               "pushing",
                               "grabbing",
                               "fighting",
@@ -93,7 +133,7 @@ You MUST respond using the provided tool function.`,
                           },
                           description: {
                             type: "string",
-                            description: "Brief description of the behavior",
+                            description: "Brief description of the behavior with context (friendly vs hostile)",
                           },
                           isSuspicious: { type: "boolean" },
                         },
@@ -105,7 +145,7 @@ You MUST respond using the provided tool function.`,
                       type: "string",
                       enum: ["safe", "suspicious", "alert"],
                       description:
-                        "safe = normal, suspicious = warrants attention, alert = immediate action needed",
+                        "Based on confidence: <40=safe, 40-70=suspicious, >70=alert",
                     },
                     riskLevel: {
                       type: "string",
@@ -114,16 +154,19 @@ You MUST respond using the provided tool function.`,
                     alertType: {
                       type: "string",
                       description:
-                        "Type of alert if suspicious/alert (e.g., PHYSICAL HARASSMENT, AGGRESSIVE BEHAVIOR, STALKING BEHAVIOR, FIGHTING, CLOSE CONTACT)",
+                        "Type of alert ONLY if confidence > 70 (e.g., PHYSICAL HARASSMENT, AGGRESSIVE BEHAVIOR, STALKING, FIGHTING). Leave empty for friendly interactions.",
                     },
                     summary: {
                       type: "string",
                       description:
-                        "One-line summary of what was detected in the frame",
+                        "One-line summary including the interaction context and confidence level",
                     },
                   },
                   required: [
                     "personsDetected",
+                    "poseAnalysis",
+                    "interactionContext",
+                    "confidence",
                     "behaviors",
                     "overallStatus",
                     "riskLevel",

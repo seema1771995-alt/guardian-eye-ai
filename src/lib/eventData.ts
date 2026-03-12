@@ -13,7 +13,9 @@ export interface CameraEvent {
   personsDetected?: number;
   alertType?: string;
   incidentTimestamp?: Date;
-  frameImageUrl?: string; // data URL of the analyzed frame
+  frameImageUrl?: string;
+  confidence?: number;
+  interactionContext?: string;
 }
 
 export function formatTimestamp(date: Date): string {

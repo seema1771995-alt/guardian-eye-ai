@@ -35,11 +35,23 @@ const EventLogItem = ({ event, isSelected, onClick }: EventLogItemProps) => {
           <span className="font-mono text-xs text-alert ml-2">
             {event.alertType}
           </span>
+          {event.confidence != null && (
+            <span className="font-mono text-[10px] text-text-dim ml-2">
+              {event.confidence}%
+            </span>
+          )}
         </div>
       ) : (
-        <p className="font-body text-xs text-text-dim truncate">
-          {event.description}
-        </p>
+        <div>
+          <p className="font-body text-xs text-text-dim truncate">
+            {event.description}
+          </p>
+          {event.confidence != null && (
+            <span className="font-mono text-[10px] text-text-dim">
+              Confidence: {event.confidence}%
+            </span>
+          )}
+        </div>
       )}
     </button>
   );
