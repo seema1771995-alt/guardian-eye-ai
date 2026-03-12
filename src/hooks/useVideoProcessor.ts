@@ -6,6 +6,9 @@ export interface FrameAnalysis {
   frameDataUrl: string;
   analysis: {
     personsDetected: number;
+    poseAnalysis?: string;
+    interactionContext?: string;
+    confidence?: number;
     behaviors: Array<{
       type: string;
       description: string;
