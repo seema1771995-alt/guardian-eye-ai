@@ -96,6 +96,8 @@ const VideoUploadPanel = ({ onAlertGenerated, onEventGenerated, onAnalysisComple
           personsDetected: result.analysis.personsDetected,
           alertType: result.analysis.alertType,
           frameImageUrl: result.frameDataUrl,
+          confidence: result.analysis.confidence,
+          interactionContext: result.analysis.interactionContext,
         };
 
         if (event.status === "alert") {
