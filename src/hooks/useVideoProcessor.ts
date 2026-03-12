@@ -92,19 +92,36 @@ export function useVideoProcessor() {
 
   const analyzeFrame = useCallback(
     async (base64: string, frameIndex: number, total: number): Promise<FrameAnalysis["analysis"]> => {
-      const { data, error } = await supabase.functions.invoke("analyze-frame", {
-        body: { frameBase64: base64, frameIndex, totalFrames: total },
-      });
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const { data, error } = await supabase.functions.invoke("analyze-frame", {
+          body: { frameBase64: base64, frameIndex, totalFrames: total },
+        });
 
-      if (error) {
-        throw new Error(error.message || "Analysis failed");
+        if (error) {
+          const msg = error.message || "";
+          if ((msg.includes("429") || msg.includes("Rate")) && attempt < maxRetries - 1) {
+            const wait = (attempt + 1) * 5000;
+            console.warn(`Rate limited on frame ${frameIndex}, retrying in ${wait}ms...`);
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+          }
+          throw new Error(msg || "Analysis failed");
+        }
+
+        if (data?.error) {
+          if ((data.error.includes("Rate") || data.error.includes("429")) && attempt < maxRetries - 1) {
+            const wait = (attempt + 1) * 5000;
+            console.warn(`Rate limited on frame ${frameIndex}, retrying in ${wait}ms...`);
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+          }
+          throw new Error(data.error);
+        }
+
+        return data.analysis;
       }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      return data.analysis;
+      throw new Error("Max retries exceeded");
     },
     []
   );
@@ -162,7 +179,7 @@ export function useVideoProcessor() {
 
           // Small delay to avoid rate limits
           if (i < frames.length - 1) {
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 3000));
           }
         }
 
