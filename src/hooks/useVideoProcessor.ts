@@ -179,7 +179,7 @@ export function useVideoProcessor() {
 
           // Small delay to avoid rate limits
           if (i < frames.length - 1) {
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 3000));
           }
         }
 
