@@ -139,6 +139,12 @@ const FocusPane = ({ event, isFlashing }: FocusPaneProps) => {
           {isAlert && event.riskLevel && (
             <Detail label="RISK" value={event.riskLevel} isAlert />
           )}
+          {event.confidence != null && (
+            <Detail label="CONFIDENCE" value={`${event.confidence}%`} isAlert={event.confidence > 70} />
+          )}
+          {event.interactionContext && (
+            <Detail label="CONTEXT" value={event.interactionContext} />
+          )}
         </div>
       )}
     </div>
