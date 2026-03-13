@@ -101,7 +101,17 @@ const Dashboard = () => {
                 : "text-text-dim hover:text-text-secondary"
             }`}
           >
-            VIDEO ANALYSIS
+            VIDEO
+          </button>
+          <button
+            onClick={() => setRightPanel("live")}
+            className={`font-mono text-[10px] px-3 py-1 rounded-sm transition-colors ${
+              rightPanel === "live"
+                ? "bg-surface-elevated text-text-primary"
+                : "text-text-dim hover:text-text-secondary"
+            }`}
+          >
+            LIVE 📹
           </button>
           {hasEvents && (
             <button
@@ -112,7 +122,7 @@ const Dashboard = () => {
                   : "text-text-dim hover:text-text-secondary"
               }`}
             >
-              EVENT LOG
+              LOG
               {events.filter(e => e.status === "alert").length > 0 && (
                 <span className="ml-1.5 text-alert font-bold">
                   {events.filter(e => e.status === "alert").length}
