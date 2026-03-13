@@ -3,10 +3,11 @@ import { CameraEvent } from "@/lib/eventData";
 import FocusPane from "@/components/FocusPane";
 import EventLog from "@/components/EventLog";
 import VideoUploadPanel from "@/components/VideoUploadPanel";
+import LiveCameraPanel from "@/components/LiveCameraPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import { toast } from "sonner";
 
-type RightPanel = "video" | "log" | "history";
+type RightPanel = "video" | "live" | "log" | "history";
 
 const Dashboard = () => {
   const [events, setEvents] = useState<CameraEvent[]>([]);
