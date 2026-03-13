@@ -3,10 +3,11 @@ import { CameraEvent } from "@/lib/eventData";
 import FocusPane from "@/components/FocusPane";
 import EventLog from "@/components/EventLog";
 import VideoUploadPanel from "@/components/VideoUploadPanel";
+import LiveCameraPanel from "@/components/LiveCameraPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import { toast } from "sonner";
 
-type RightPanel = "video" | "log" | "history";
+type RightPanel = "video" | "live" | "log" | "history";
 
 const Dashboard = () => {
   const [events, setEvents] = useState<CameraEvent[]>([]);
@@ -100,7 +101,17 @@ const Dashboard = () => {
                 : "text-text-dim hover:text-text-secondary"
             }`}
           >
-            VIDEO ANALYSIS
+            VIDEO
+          </button>
+          <button
+            onClick={() => setRightPanel("live")}
+            className={`font-mono text-[10px] px-3 py-1 rounded-sm transition-colors ${
+              rightPanel === "live"
+                ? "bg-surface-elevated text-text-primary"
+                : "text-text-dim hover:text-text-secondary"
+            }`}
+          >
+            LIVE 📹
           </button>
           {hasEvents && (
             <button
@@ -111,7 +122,7 @@ const Dashboard = () => {
                   : "text-text-dim hover:text-text-secondary"
               }`}
             >
-              EVENT LOG
+              LOG
               {events.filter(e => e.status === "alert").length > 0 && (
                 <span className="ml-1.5 text-alert font-bold">
                   {events.filter(e => e.status === "alert").length}
@@ -144,6 +155,13 @@ const Dashboard = () => {
               onEventGenerated={handleVideoEvent}
               onAnalysisComplete={handleAnalysisComplete}
               getNextCameraId={getNextCameraId}
+            />
+          ) : rightPanel === "live" ? (
+            <LiveCameraPanel
+              onAlertGenerated={handleVideoAlert}
+              onEventGenerated={handleVideoEvent}
+              cameraId="LIVE-01"
+              cameraName="Webcam"
             />
           ) : rightPanel === "log" ? (
             <EventLog
