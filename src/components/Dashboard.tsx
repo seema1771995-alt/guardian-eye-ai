@@ -156,6 +156,13 @@ const Dashboard = () => {
               onAnalysisComplete={handleAnalysisComplete}
               getNextCameraId={getNextCameraId}
             />
+          ) : rightPanel === "live" ? (
+            <LiveCameraPanel
+              onAlertGenerated={handleVideoAlert}
+              onEventGenerated={handleVideoEvent}
+              cameraId="LIVE-01"
+              cameraName="Webcam"
+            />
           ) : rightPanel === "log" ? (
             <EventLog
               events={events}
