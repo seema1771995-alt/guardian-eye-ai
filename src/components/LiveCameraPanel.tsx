@@ -10,8 +10,8 @@ interface LiveCameraPanelProps {
   cameraName: string;
 }
 
-const COOLDOWN_MS = 12000; // 12 seconds between analyses
-const MOTION_CHECK_MS = 1000; // check for motion every 1s
+const COOLDOWN_MS = 12000;
+const MOTION_CHECK_MS = 1000;
 
 let liveEventCounter = 1000;
 
@@ -36,6 +36,7 @@ const LiveCameraPanel = ({
   const [alertCount, setAlertCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [videoReady, setVideoReady] = useState(false);
 
   const { detectMotion, reset: resetMotion } = useMotionDetection();
 
@@ -47,11 +48,9 @@ const LiveCameraPanel = ({
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
 
-    canvas.width = Math.min(video.videoWidth, 640);
-    canvas.height = Math.min(video.videoHeight, 480);
-    const scale = Math.min(640 / video.videoWidth, 480 / video.videoHeight);
-    canvas.width = video.videoWidth * scale;
-    canvas.height = video.videoHeight * scale;
+    const scale = Math.min(640 / video.videoWidth, 480 / video.videoHeight, 1);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
@@ -110,7 +109,6 @@ const LiveCameraPanel = ({
       }
     } catch (err) {
       console.error("Live analysis error:", err);
-      // Don't show error for rate limits, just skip
     } finally {
       analyzingRef.current = false;
       setIsAnalyzing(false);
@@ -119,7 +117,7 @@ const LiveCameraPanel = ({
 
   // Motion check loop
   useEffect(() => {
-    if (!isStreaming) return;
+    if (!isStreaming || !videoReady) return;
 
     motionIntervalRef.current = setInterval(() => {
       const canvas = canvasRef.current;
@@ -129,10 +127,9 @@ const LiveCameraPanel = ({
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
 
-      // Draw current frame for motion comparison
-      const scale = Math.min(640 / video.videoWidth, 480 / video.videoHeight);
-      canvas.width = video.videoWidth * scale;
-      canvas.height = video.videoHeight * scale;
+      const scale = Math.min(640 / video.videoWidth, 480 / video.videoHeight, 1);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const hasMotion = detectMotion(canvas);
@@ -142,7 +139,6 @@ const LiveCameraPanel = ({
         analyzeCurrentFrame();
       }
 
-      // Update cooldown display
       const remaining = Math.max(0, COOLDOWN_MS - (Date.now() - lastAnalysisRef.current));
       setCooldownRemaining(Math.ceil(remaining / 1000));
     }, MOTION_CHECK_MS);
@@ -150,24 +146,53 @@ const LiveCameraPanel = ({
     return () => {
       if (motionIntervalRef.current) clearInterval(motionIntervalRef.current);
     };
-  }, [isStreaming, detectMotion, analyzeCurrentFrame]);
+  }, [isStreaming, videoReady, detectMotion, analyzeCurrentFrame]);
 
   const startStream = async () => {
     setError(null);
+    setVideoReady(false);
+
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError(
+        "Camera API not available. If viewing in an embedded preview, please open the app in a new tab."
+      );
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "environment" },
         audio: false,
       });
+
       streamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+
+        // Wait for video to be ready before marking as streaming
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => {
+            setVideoReady(true);
+            setIsStreaming(true);
+            resetMotion();
+          }).catch((playErr) => {
+            console.error("Video play error:", playErr);
+            setError("Could not play video stream. Please try again.");
+          });
+        };
       }
-      setIsStreaming(true);
-      resetMotion();
-    } catch (err) {
-      setError("Camera access denied. Please allow camera permissions.");
+    } catch (err: unknown) {
+      const message =
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Camera access denied. Please allow camera permissions and try again."
+          : err instanceof DOMException && err.name === "NotFoundError"
+            ? "No camera found. Please connect a camera and try again."
+            : err instanceof DOMException && err.name === "NotReadableError"
+              ? "Camera is in use by another application."
+              : "Could not access camera. Try opening the app in a new browser tab.";
+      setError(message);
       console.error("Camera error:", err);
     }
   };
@@ -181,6 +206,7 @@ const LiveCameraPanel = ({
       videoRef.current.srcObject = null;
     }
     setIsStreaming(false);
+    setVideoReady(false);
     setMotionDetected(false);
     resetMotion();
   }, [resetMotion]);
@@ -204,9 +230,13 @@ const LiveCameraPanel = ({
             Live Camera
           </h2>
           <div className="flex items-center gap-2">
-            {isStreaming && (
+            {isStreaming && videoReady && (
               <div className="flex items-center gap-1.5">
-                <div className={`w-1.5 h-1.5 rounded-full ${motionDetected ? "bg-alert alert-pulse" : "bg-green-500"}`} />
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    motionDetected ? "bg-alert alert-pulse" : "bg-green-500"
+                  }`}
+                />
                 <span className="font-mono text-[10px] text-text-dim">
                   {motionDetected ? "MOTION" : "IDLE"}
                 </span>
@@ -214,10 +244,12 @@ const LiveCameraPanel = ({
             )}
           </div>
         </div>
-        {isStreaming && (
+        {isStreaming && videoReady && (
           <div className="flex items-center gap-3 mt-1">
-            <span className="font-mono text-[10px] text-text-primary font-semibold">{cameraId}</span>
-            <span className="font-mono text-[10px] text-text-dim">🔴 LIVE</span>
+            <span className="font-mono text-[10px] text-text-primary font-semibold">
+              {cameraId}
+            </span>
+            <span className="font-mono text-[10px] text-alert">🔴 LIVE</span>
           </div>
         )}
       </div>
@@ -225,28 +257,46 @@ const LiveCameraPanel = ({
       {/* Video feed */}
       <div className="p-3 border-b border-border flex-shrink-0">
         {!isStreaming ? (
-          <button
-            onClick={startStream}
-            className="w-full border border-dashed border-border rounded-sm p-6 flex flex-col items-center gap-2 hover:border-foreground/30 transition-colors"
-          >
-            <div className="w-8 h-8 border border-border rounded-sm flex items-center justify-center">
-              <span className="font-mono text-xs text-text-dim">📹</span>
-            </div>
-            <span className="font-mono text-xs text-text-dim">START LIVE CAMERA</span>
-            <span className="font-body text-[10px] text-text-dim">
-              Motion-triggered analysis every ~12s
-            </span>
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={startStream}
+              className="w-full border border-dashed border-border rounded-sm p-6 flex flex-col items-center gap-2 hover:border-foreground/30 transition-colors"
+            >
+              <div className="w-8 h-8 border border-border rounded-sm flex items-center justify-center">
+                <span className="font-mono text-xs text-text-dim">📹</span>
+              </div>
+              <span className="font-mono text-xs text-text-dim">START LIVE CAMERA</span>
+              <span className="font-body text-[10px] text-text-dim">
+                Motion-triggered analysis every ~12s
+              </span>
+            </button>
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-sm p-3">
+                <p className="font-mono text-xs text-alert">{error}</p>
+                <p className="font-body text-[10px] text-text-dim mt-1">
+                  Tip: Open the app in a separate browser tab for camera access.
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
-            <div className="relative rounded-sm overflow-hidden border border-border">
+            <div className="relative rounded-sm overflow-hidden border border-border bg-black">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-auto"
+                className="w-full block"
+                style={{ minHeight: "180px", objectFit: "cover" }}
               />
+              {!videoReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black">
+                  <span className="font-mono text-xs text-text-dim animate-pulse">
+                    CONNECTING CAMERA...
+                  </span>
+                </div>
+              )}
               {isAnalyzing && (
                 <div className="absolute top-2 right-2 bg-background/80 px-2 py-0.5 rounded-sm">
                   <span className="font-mono text-[10px] text-text-secondary animate-pulse">
@@ -254,7 +304,7 @@ const LiveCameraPanel = ({
                   </span>
                 </div>
               )}
-              {cooldownRemaining > 0 && !isAnalyzing && (
+              {cooldownRemaining > 0 && !isAnalyzing && videoReady && (
                 <div className="absolute bottom-2 right-2 bg-background/80 px-2 py-0.5 rounded-sm">
                   <span className="font-mono text-[10px] text-text-dim">
                     NEXT IN {cooldownRemaining}s
@@ -270,10 +320,6 @@ const LiveCameraPanel = ({
             </button>
           </div>
         )}
-
-        {error && (
-          <p className="font-mono text-xs text-alert mt-2">{error}</p>
-        )}
       </div>
 
       {/* Hidden canvas for frame capture */}
@@ -288,7 +334,11 @@ const LiveCameraPanel = ({
           </div>
           <div>
             <span className="font-mono text-[10px] text-text-dim block">ALERTS</span>
-            <span className={`font-mono text-sm ${alertCount > 0 ? "text-alert font-bold" : "text-text-secondary"}`}>
+            <span
+              className={`font-mono text-sm ${
+                alertCount > 0 ? "text-alert font-bold" : "text-text-secondary"
+              }`}
+            >
               {alertCount}
             </span>
           </div>
@@ -296,7 +346,12 @@ const LiveCameraPanel = ({
             <span className="font-mono text-[10px] text-text-dim block">LAST</span>
             <span className="font-mono text-[10px] text-text-dim">
               {lastAnalysisTime
-                ? lastAnalysisTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                ? lastAnalysisTime.toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
                 : "—"}
             </span>
           </div>
@@ -308,15 +363,27 @@ const LiveCameraPanel = ({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <div className="w-1 h-1 rounded-full bg-green-500" />
-            <span className="font-body text-[10px] text-text-dim">Motion detection active</span>
+            <span className="font-body text-[10px] text-text-dim">
+              Motion detection active when streaming
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-1 h-1 rounded-full bg-text-secondary" />
-            <span className="font-body text-[10px] text-text-dim">12s cooldown between analyses</span>
+            <span className="font-body text-[10px] text-text-dim">
+              12s cooldown between analyses
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-1 h-1 rounded-full bg-text-secondary" />
-            <span className="font-body text-[10px] text-text-dim">Frames sent only when motion detected</span>
+            <span className="font-body text-[10px] text-text-dim">
+              Frames sent only when motion detected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-1 rounded-full bg-text-secondary" />
+            <span className="font-body text-[10px] text-text-dim">
+              Open in new tab if camera doesn't start
+            </span>
           </div>
         </div>
       </div>
